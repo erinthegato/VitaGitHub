@@ -31,7 +31,7 @@ add_executable(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-  curl ssl crypto
+  curl ssl crypto zstd
   vita2d freetype png jpeg z m c pthread
   SceLibKernel_stub SceKernelThreadMgr_stub SceIofilemgr_stub
   SceDisplay_stub SceGxm_stub SceCtrl_stub SceSysmodule_stub

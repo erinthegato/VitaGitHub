@@ -26,11 +26,11 @@ jobs:
         run: |
           echo "VITASDK=$VITASDK"
           missing=0
-          for lib in libcurl.a libssl.a libcrypto.a libvita2d.a libfreetype.a libpng.a libjpeg.a libz.a; do
+          for lib in libcurl.a libssl.a libcrypto.a libvita2d.a libfreetype.a libpng.a libjpeg.a libz.a libzstd.a; do
             if [ -f "$VITASDK/arm-vita-eabi/lib/$lib" ]; then echo "found   $lib"; else echo "MISSING $lib"; missing=1; fi
           done
           if [ "$missing" = 1 ]; then
-            "$VITASDK/bin/vdpm" curl openssl vita2d freetype libpng libjpeg-turbo zlib
+            "$VITASDK/bin/vdpm" curl openssl vita2d freetype libpng libjpeg-turbo zlib zstd
           fi
 
       - name: Build
