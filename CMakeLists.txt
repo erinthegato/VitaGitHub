@@ -17,11 +17,12 @@ set(VITA_VERSION  "01.00")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -O2 -std=gnu11")
 
-# Root certificates used to verify GitHub's TLS certificate.
-# Downloaded automatically the first time you build.
-if(NOT EXISTS ${CMAKE_SOURCE_DIR}/cacert.pem)
-  message(STATUS "Downloading CA certificate bundle...")
-  file(DOWNLOAD https://curl.se/ca/cacert.pem ${CMAKE_SOURCE_DIR}/cacert.pem TLS_VERIFY ON)
+# Root certificates (Mozilla list) used to check GitHub's TLS certificate.
+# cacert.pem is kept in the repo. Stop the build if it's missing or broken,
+# because the app can't connect without it.
+file(SIZE ${CMAKE_SOURCE_DIR}/cacert.pem CACERT_SIZE)
+if(CACERT_SIZE LESS 100000)
+  message(FATAL_ERROR "cacert.pem is missing or too small (${CACERT_SIZE} bytes)")
 endif()
 
 add_executable(${PROJECT_NAME}

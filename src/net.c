@@ -7,15 +7,24 @@
 #include <psp2/sysmodule.h>
 #include <psp2/net/net.h>
 #include <psp2/net/netctl.h>
+#include <time.h>
 #include <curl/curl.h>
 #include "net.h"
 
 #define USER_AGENT  "VitaGitHub/1.0 (PS Vita)"   // GitHub rejects requests without one
-#define CA_BUNDLE   "app0:cacert.pem"
+#define CA_BUNDLE      "app0:cacert.pem"
+#define CA_BUNDLE_USER "ux0:data/VitaGitHub/cacert.pem"   // optional newer copy
 #define NET_MEM     (1 * 1024 * 1024)
 #define MAX_API_BODY (8 * 1024 * 1024)
 
 static char g_err[256];
+static const char *g_ca = CA_BUNDLE;
+
+// Use ux0:data/VitaGitHub/cacert.pem if you put one there, else the built-in one.
+static void pick_ca_bundle(void) {
+    FILE *f = fopen(CA_BUNDLE_USER, "r");
+    if (f) { fclose(f); g_ca = CA_BUNDLE_USER; }
+}
 static void *g_netmem;
 static char g_auth[300];   // "Authorization: Bearer <token>" or empty
 
@@ -60,6 +69,13 @@ int net_init(void) {
     }
     sceNetCtlInit();
     curl_global_init(CURL_GLOBAL_ALL);
+    pick_ca_bundle();
+    FILE *f = fopen(g_ca, "r");
+    if (!f) {
+        snprintf(g_err, sizeof(g_err), "Certificate file %s not found - reinstall the app", g_ca);
+        return -1;
+    }
+    fclose(f);
     return 0;
 }
 
@@ -77,7 +93,7 @@ static void common_opts(CURL *c, const char *url, char *errbuf) {
     curl_easy_setopt(c, CURLOPT_USERAGENT, USER_AGENT);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);   // release files redirect to a CDN
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-    curl_easy_setopt(c, CURLOPT_CAINFO, CA_BUNDLE);
+    curl_easy_setopt(c, CURLOPT_CAINFO, g_ca);
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYPEER, 1L);   // really check the certificate
     curl_easy_setopt(c, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 20L);
@@ -89,8 +105,16 @@ static void common_opts(CURL *c, const char *url, char *errbuf) {
 
 static void set_curl_error(CURLcode rc, const char *errbuf) {
     const char *msg = errbuf[0] ? errbuf : curl_easy_strerror(rc);
-    if (rc == CURLE_PEER_FAILED_VERIFICATION || rc == CURLE_SSL_CACERT_BADFILE)
-        snprintf(g_err, sizeof(g_err), "TLS error: %s (is the Vita clock correct?)", msg);
+    if (rc == CURLE_SSL_CACERT_BADFILE) {
+        snprintf(g_err, sizeof(g_err), "TLS: can't read certificate file %s: %s", g_ca, msg);
+    } else if (rc == CURLE_PEER_FAILED_VERIFICATION || rc == CURLE_SSL_CONNECT_ERROR) {
+        // Show the Vita's date too: a wrong clock is the usual cause
+        char date[16] = "?";
+        time_t now = time(NULL);
+        struct tm *t = gmtime(&now);
+        if (t) strftime(date, sizeof(date), "%Y-%m-%d", t);
+        snprintf(g_err, sizeof(g_err), "TLS error %d: %s [Vita date %s]", (int)rc, msg, date);
+    }
     else if (rc == CURLE_COULDNT_RESOLVE_HOST || rc == CURLE_COULDNT_CONNECT)
         snprintf(g_err, sizeof(g_err), "No connection: %s (Wi-Fi on?)", msg);
     else
